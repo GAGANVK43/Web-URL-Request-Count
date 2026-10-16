@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hadoop MapReduce - Web URL Request Count Dashboard</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-yellow-400 flex items-center justify-center shadow-lg shadow-amber-500/20">
+          <i class="fa-solid fa-network-wired text-white text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-white leading-tight">Web URL Request Count</h1>
+          <p class="text-xs text-slate-400">Apache Hadoop MapReduce Analytics</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <span class="w-2 h-2 mr-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          Hadoop Local Node Ready
+        </span>
+        <button id="btn-run" onclick="triggerRunJob()" class="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-sm transition-all shadow-md shadow-amber-500/25 active:scale-95">
+          <i id="run-spinner" class="fa-solid fa-play"></i>
+          <span id="run-btn-text">Execute MapReduce</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- KPI Metric Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <!-- Card 1 -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-slate-600 transition">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Requests</span>
+          <div class="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
+            <i class="fa-solid fa-chart-line text-sm"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline space-x-2">
+          <span id="stat-total" class="text-3xl font-extrabold text-white tracking-tight">0</span>
+          <span class="text-xs text-slate-400">logged hits</span>
+        </div>
+        <div class="mt-2 text-xs text-slate-400 flex items-center">
+          <i class="fa-solid fa-database text-slate-500 mr-1.5"></i>
+          <span>Aggregated from access logs</span>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-slate-600 transition">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Unique URLs</span>
+          <div class="w-9 h-9 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center">
+            <i class="fa-solid fa-link text-sm"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline space-x-2">
+          <span id="stat-unique" class="text-3xl font-extrabold text-purple-400 tracking-tight">0</span>
+          <span class="text-xs text-slate-400">endpoints</span>
+        </div>
+        <div class="mt-2 text-xs text-slate-400 flex items-center">
+          <i class="fa-solid fa-arrows-split-up-and-left text-slate-500 mr-1.5"></i>
+          <span>Distinct reducer output keys</span>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-slate-600 transition">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Top Endpoint</span>
+          <div class="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center">
+            <i class="fa-solid fa-fire text-sm"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline space-x-2">
+          <span id="stat-top" class="text-2xl font-extrabold text-amber-400 font-mono tracking-tight truncate max-w-[170px]">/home</span>
+        </div>
+        <div class="mt-2 text-xs text-slate-400 flex items-center">
+          <span id="stat-top-hits" class="font-medium text-slate-300 mr-1">0</span> requests handled
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-slate-600 transition">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Execution Engine</span>
+          <div class="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+            <i class="fa-solid fa-microchip text-sm"></i>
+          </div>
+        </div>
+        <div class="mt-4">
+          <span id="stat-engine" class="text-sm font-bold text-emerald-400 leading-snug block">Hadoop MapReduce</span>
+          <span id="stat-duration" class="text-xs text-slate-400 block mt-0.5">Execution: --</span>
+        </div>
+        <div class="mt-2 text-xs text-slate-400 flex items-center">
+          <i class="fa-solid fa-check-circle text-emerald-500 mr-1.5"></i>
+          <span>LocalJobRunner active</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Bar Chart -->
+      <div class="lg:col-span-2 bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 shadow-lg">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white">URL Request Distribution</h2>
+            <p class="text-xs text-slate-400">Total hit frequency counted by MapReduce Reducer</p>
+          </div>
+          <span class="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded">Bar Analysis</span>
+        </div>
+        <div class="h-64 relative">
+          <canvas id="barChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Doughnut Chart -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 shadow-lg flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white">Traffic Share</h2>
+            <p class="text-xs text-slate-400">Percentage distribution</p>
+          </div>
+          <span class="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded">Share %</span>
+        </div>
+        <div class="h-64 relative flex items-center justify-center">
+          <canvas id="donutChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- MapReduce Output Results & Raw Output Tabs -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      
+      <!-- Table of Aggregated URLs -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 shadow-lg flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-square-poll-vertical text-amber-400"></i>
+              <span>MapReduce Output Results</span>
+            </h2>
+            <p class="text-xs text-slate-400">Aggregated key-value pairs (part-r-00000)</p>
+          </div>
+          <span id="output-badge" class="px-2 py-0.5 text-xs font-semibold rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            5 Keys
+          </span>
+        </div>
+
+        <div class="overflow-x-auto custom-scrollbar flex-1">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-700/40 text-slate-400 text-xs uppercase font-semibold">
+              <tr>
+                <th class="py-2.5 px-3 rounded-l-lg">Target URL</th>
+                <th class="py-2.5 px-3 text-center">Requests</th>
+                <th class="py-2.5 px-3">Share %</th>
+                <th class="py-2.5 px-3 rounded-r-lg text-right">Traffic Bar</th>
+              </tr>
+            </thead>
+            <tbody id="results-table-body" class="divide-y divide-slate-700/50 text-slate-300">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Raw part-r-00000 & Execution Console -->
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 shadow-lg flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-terminal text-emerald-400"></i>
+              <span>Raw HDFS Output & Logs</span>
+            </h2>
+            <p class="text-xs text-slate-400">output/part-r-00000 content and job progress</p>
+          </div>
+          <div class="flex space-x-2">
+            <button onclick="toggleTab('raw')" id="tab-btn-raw" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-amber-500 text-slate-950 font-semibold transition">part-r-00000</button>
+            <button onclick="toggleTab('logs')" id="tab-btn-logs" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Hadoop Logs</button>
+          </div>
+        </div>
+
+        <!-- Raw Tab Content -->
+        <div id="tab-content-raw" class="flex-1 bg-slate-950/80 rounded-xl p-4 border border-slate-800 font-mono text-xs overflow-auto custom-scrollbar max-h-72">
+          <div class="text-slate-500 mb-2 border-b border-slate-800 pb-1 flex justify-between">
+            <span># Output format: &lt;URL&gt;\t&lt;RequestCount&gt;</span>
+            <span class="text-slate-600">output/part-r-00000</span>
+          </div>
+          <pre id="raw-output-text" class="text-emerald-400 whitespace-pre leading-relaxed">Loading output...</pre>
+        </div>
+
+        <!-- Logs Tab Content -->
+        <div id="tab-content-logs" class="hidden flex-1 bg-slate-950/80 rounded-xl p-4 border border-slate-800 font-mono text-xs overflow-auto custom-scrollbar max-h-72">
+          <div class="text-slate-500 mb-2 border-b border-slate-800 pb-1 flex justify-between">
+            <span># MapReduce Job Execution Trace</span>
+            <span class="text-slate-600">LocalJobRunner</span>
+          </div>
+          <pre id="logs-output-text" class="text-slate-400 whitespace-pre leading-relaxed">Press 'Execute MapReduce' to see live Hadoop job execution output...</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Dataset Section -->
+    <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 shadow-lg">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-700/60 gap-4">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <i class="fa-solid fa-file-csv text-blue-400"></i>
+            <span>Input Dataset: web_access_log.csv</span>
+          </h2>
+          <p class="text-xs text-slate-400">The sample log entries processed by MapReduce</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="openAddModal()" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center space-x-1.5 transition">
+            <i class="fa-solid fa-plus"></i>
+            <span>Add Log Entry</span>
+          </button>
+          <button onclick="resetDataset()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium text-xs flex items-center space-x-1.5 transition">
+            <i class="fa-solid fa-rotate-left"></i>
+            <span>Reset Sample</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-4 overflow-x-auto custom-scrollbar max-h-60">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-700/40 text-slate-400 uppercase font-semibold sticky top-0 backdrop-blur">
+            <tr>
+              <th class="py-2 px-3">#</th>
+              <th class="py-2 px-3">Timestamp</th>
+              <th class="py-2 px-3">Client IP</th>
+              <th class="py-2 px-3">Method</th>
+              <th class="py-2 px-3">Requested URL</th>
+              <th class="py-2 px-3">Status</th>
+            </tr>
+          </thead>
+          <tbody id="input-table-body" class="divide-y divide-slate-700/50 text-slate-300">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Add Log Modal -->
+  <div id="add-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+        <h3 class="font-bold text-white text-base flex items-center space-x-2">
+          <i class="fa-solid fa-plus-circle text-amber-400"></i>
+          <span>Add Custom Access Log Record</span>
+        </h3>
+        <button onclick="closeAddModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">URL Endpoint (e.g. /home, /dashboard, /cart)</label>
+          <input id="input-url" type="text" placeholder="/dashboard" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-400">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">HTTP Method</label>
+            <select id="input-method" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-400">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">HTTP Status</label>
+            <input id="input-status" type="text" value="200" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-400">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Client IP</label>
+          <input id="input-ip" type="text" value="192.168.1.150" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-400">
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-2 pt-3 border-t border-slate-700">
+        <button onclick="closeAddModal()" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold">Cancel</button>
+        <button onclick="submitAddLog()" class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs">Add Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 transform translate-y-24 opacity-0 transition-all duration-300 z-50">
+    <i id="toast-icon" class="fa-solid fa-check text-emerald-400"></i>
+    <span id="toast-message" class="text-xs font-medium">Notification message</span>
+  </div>
+
+  <!-- Script logic -->
+  <script>
+    let barChartInstance = null;
+    let donutChartInstance = null;
+
+    const colors = [
+      '#f59e0b', '#3b82f6', '#10b981', '#a855f7', '#ec4899', 
+      '#06b6d4', '#f97316', '#84cc16', '#6366f1', '#14b8a6'
+    ];
+
+    function showToast(msg, isSuccess = true) {
+      const toast = document.getElementById('toast');
+      const icon = document.getElementById('toast-icon');
+      const text = document.getElementById('toast-message');
+      
+      text.textContent = msg;
+      icon.className = isSuccess ? 'fa-solid fa-circle-check text-emerald-400' : 'fa-solid fa-circle-exclamation text-rose-400';
+      
+      toast.classList.remove('translate-y-24', 'opacity-0');
+      setTimeout(() => {
+        toast.classList.add('translate-y-24', 'opacity-0');
+      }, 3500);
+    }
+
+    function toggleTab(tab) {
+      const btnRaw = document.getElementById('tab-btn-raw');
+      const btnLogs = document.getElementById('tab-btn-logs');
+      const contentRaw = document.getElementById('tab-content-raw');
+      const contentLogs = document.getElementById('tab-content-logs');
+
+      if (tab === 'raw') {
+        btnRaw.className = 'px-2.5 py-1 text-xs font-medium rounded-lg bg-amber-500 text-slate-950 font-semibold transition';
+        btnLogs.className = 'px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition';
+        contentRaw.classList.remove('hidden');
+        contentLogs.classList.add('hidden');
+      } else {
+        btnLogs.className = 'px-2.5 py-1 text-xs font-medium rounded-lg bg-amber-500 text-slate-950 font-semibold transition';
+        btnRaw.className = 'px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition';
+        contentLogs.classList.remove('hidden');
+        contentRaw.classList.add('hidden');
+      }
+    }
+
+    function updateCharts(results) {
+      const labels = results.map(r => r.url);
+      const counts = results.map(r => r.count);
+
+      // Bar Chart
+      const barCtx = document.getElementById('barChart').getContext('2d');
+      if (barChartInstance) barChartInstance.destroy();
+
+      barChartInstance = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Requests Count',
+            data: counts,
+            backgroundColor: 'rgba(245, 158, 11, 0.75)',
+            borderColor: '#f59e0b',
+            borderWidth: 1.5,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (context) => ` ${context.raw} requests`
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 } },
+              grid: { color: 'rgba(51, 65, 85, 0.4)' }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1, color: '#94a3b8' },
+              grid: { color: 'rgba(51, 65, 85, 0.4)' }
+            }
+          }
+        }
+      });
+
+      // Donut Chart
+      const donutCtx = document.getElementById('donutChart').getContext('2d');
+      if (donutChartInstance) donutChartInstance.destroy();
+
+      donutChartInstance = new Chart(donutCtx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: counts,
+            backgroundColor: colors.slice(0, labels.length),
+            borderColor: '#1e293b',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#cbd5e1', font: { size: 11 }, boxWidth: 12 }
+            }
+          },
+          cutout: '65%'
+        }
+      });
+    }
+
+    function renderUI(data) {
+      // Metrics
+      document.getElementById('stat-total').textContent = data.total_requests;
+      document.getElementById('stat-unique').textContent = data.unique_urls;
+      document.getElementById('stat-top').textContent = data.top_url;
+      document.getElementById('stat-top-hits').textContent = data.top_count;
+
+      if (data.engine) {
+        document.getElementById('stat-engine').textContent = data.engine;
+      }
+      if (data.duration) {
+        document.getElementById('stat-duration').textContent = `Execution: ${data.duration}s`;
+      }
+
+      // Output Results Table
+      const resultsTbody = document.getElementById('results-table-body');
+      resultsTbody.innerHTML = '';
+      
+      const total = data.total_requests || 1;
+      (data.results || []).forEach((row, idx) => {
+        const pct = Math.round((row.count / total) * 100);
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition';
+        tr.innerHTML = `
+          <td class="py-2.5 px-3 font-mono font-medium text-amber-400">${row.url}</td>
+          <td class="py-2.5 px-3 text-center font-bold text-white">${row.count}</td>
+          <td class="py-2.5 px-3 text-xs text-slate-400">${pct}%</td>
+          <td class="py-2.5 px-3 text-right">
+            <div class="w-24 ml-auto bg-slate-700/60 rounded-full h-2 overflow-hidden">
+              <div class="bg-amber-400 h-2 rounded-full" style="width: ${pct}%"></div>
+            </div>
+          </td>
+        `;
+        resultsTbody.appendChild(tr);
+      });
+
+      document.getElementById('output-badge').textContent = `${(data.results || []).length} Keys`;
+
+      // Raw Output
+      document.getElementById('raw-output-text').textContent = data.raw_output || 'No output found yet. Click Execute.';
+      if (data.logs) {
+        document.getElementById('logs-output-text').textContent = data.logs;
+      }
+
+      // Input Table
+      const inputTbody = document.getElementById('input-table-body');
+      inputTbody.innerHTML = '';
+      (data.input_records || []).forEach((rec, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition';
+        const methodBadge = rec.method === 'POST' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
+        const statusBadge = rec.status === '200' ? 'text-emerald-400' : 'text-rose-400';
+        tr.innerHTML = `
+          <td class="py-1.5 px-3 text-slate-500">${idx + 1}</td>
+          <td class="py-1.5 px-3 font-mono text-slate-400">${rec.timestamp}</td>
+          <td class="py-1.5 px-3 font-mono text-slate-400">${rec.ip}</td>
+          <td class="py-1.5 px-3"><span class="px-2 py-0.5 rounded text-[10px] font-semibold ${methodBadge}">${rec.method}</span></td>
+          <td class="py-1.5 px-3 font-mono text-amber-300">${rec.url}</td>
+          <td class="py-1.5 px-3 font-semibold ${statusBadge}">${rec.status}</td>
+        `;
+        inputTbody.appendChild(tr);
+      });
+
+      // Update charts
+      updateCharts(data.results || []);
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        renderUI(data);
+      } catch (e) {
+        console.error('Failed to load status:', e);
+      }
+    }
+
+    async function triggerRunJob() {
+      const btn = document.getElementById('btn-run');
+      const spinner = document.getElementById('run-spinner');
+      const btnText = document.getElementById('run-btn-text');
+
+      btn.disabled = true;
+      spinner.className = 'fa-solid fa-circle-notch fa-spin';
+      btnText.textContent = 'Running MapReduce...';
+
+      try {
+        const res = await fetch('/api/run', { method: 'POST' });
+        const data = await res.json();
+        renderUI(data);
+        showToast(`MapReduce completed successfully in ${data.duration}s!`);
+      } catch (e) {
+        showToast('Error executing MapReduce job', false);
+      } finally {
+        btn.disabled = false;
+        spinner.className = 'fa-solid fa-play';
+        btnText.textContent = 'Execute MapReduce';
+      }
+    }
+
+    function openAddModal() {
+      document.getElementById('add-modal').classList.remove('hidden');
+    }
+
+    function closeAddModal() {
+      document.getElementById('add-modal').classList.add('hidden');
+    }
+
+    async function submitAddLog() {
+      const url = document.getElementById('input-url').value.trim();
+      const method = document.getElementById('input-method').value;
+      const status = document.getElementById('input-status').value.trim();
+      const ip = document.getElementById('input-ip').value.trim();
+
+      if (!url) {
+        alert('Please enter a URL (e.g. /dashboard)');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/add-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, method, status, ip })
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeAddModal();
+          document.getElementById('input-url').value = '';
+          showToast('Added log entry! Running MapReduce to recompute...');
+          await triggerRunJob();
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('Failed to add record');
+      }
+    }
+
+    async function resetDataset() {
+      if (!confirm('Reset dataset back to default 10 sample access records?')) return;
+      try {
+        const res = await fetch('/api/reset-dataset', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Dataset reset! Re-computing MapReduce...');
+          await triggerRunJob();
+        }
+      } catch (e) {
+        alert('Failed to reset dataset');
+      }
+    }
+
+    // Initial load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadStatus();
+    });
+  </script>
+</body>
+</html>
